@@ -20,15 +20,20 @@
     "test:e2e": "jest --config ./test/jest-e2e.json"
   },
   "dependencies": {
+    "@anatine/zod-nestjs": "^2.0.10",
     "@nestjs/common": "^10.0.0",
     "@nestjs/config": "^3.3.0",
     "@nestjs/core": "^10.0.0",
     "@nestjs/platform-express": "^10.0.0",
+    "@wagmi/core": "^2.16.3",
     "axios": "^1.7.9",
-    "ethers": "^6.13.5",
+    "js-yaml": "^4.1.0",
+    "nestjs-zod": "^4.2.0",
     "reflect-metadata": "^0.2.0",
     "rxjs": "^7.8.1",
-    "web3": "^4.16.0"
+    "viem": "^2.22.12",
+    "web3": "^4.16.0",
+    "zod": "^3.24.1"
   },
   "devDependencies": {
     "@nestjs/cli": "^10.0.0",
@@ -36,6 +41,7 @@
     "@nestjs/testing": "^10.0.0",
     "@types/express": "^5.0.0",
     "@types/jest": "^29.5.2",
+    "@types/js-yaml": "^4.0.5",
     "@types/node": "^20.3.1",
     "@types/supertest": "^6.0.0",
     "@typescript-eslint/eslint-plugin": "^8.0.0",

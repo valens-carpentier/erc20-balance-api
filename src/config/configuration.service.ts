@@ -2,7 +2,7 @@ import { Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import * as yaml from 'js-yaml';
 import * as fs from 'fs';
-import { NetworkConfig, RootConfigSchema } from './config.validator';
+import { NetworkConfig, TokenConfig } from './config.validator';
 import { Network } from '../interfaces/token-balance.interface';
 
 @Injectable()

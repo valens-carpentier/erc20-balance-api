@@ -83,26 +83,14 @@ export class BalanceService {
   }
 
   private async getTokenList(network: string): Promise<{ address: string }[]> {
-    // Token lists for different networks
-    const tokenLists = {
-      ethereum: [
-        { address: '0x6b175474e89094c44da98b954eedeac495271d0f' }, // DAI
-        { address: '0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2' }, // WETH
-        { address: '0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48' }  // USDC
-      ],
-      polygon: [
-        { address: '0x8f3Cf7ad23Cd3CaDbD9735AFf958023239c6A063' }, // DAI
-        { address: '0x7ceB23fD6bC0adD59E62ac25578270cFf1b9f619' }, // WETH
-        { address: '0x2791Bca1f2de4661ED88A30C99A7a9449Aa84174' }  // USDC
-      ],
-      base: [
-        { address: '0x50c5725949A6F0c72E6C4a641F24049A917DB0Cb' }, // DAI
-        { address: '0x4200000000000000000000000000000000000006' }, // WETH
-        { address: '0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913' }  // USDC
-      ]
-    };
-    
-    return tokenLists[network.toLowerCase()] || [];
+    const networkConfig = this.networkConfigService.getNetwork(network);
+    if (!networkConfig) {
+      return [];
+    }
+
+    // Get tokens from network configuration
+    const tokens = this.networkConfigService.getTokensForNetwork(network);
+    return tokens.map(token => ({ address: token.address }));
   }
 
   private async getTokenPrice(tokenAddress: string): Promise<number> {

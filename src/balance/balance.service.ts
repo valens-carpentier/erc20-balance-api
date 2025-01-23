@@ -1,85 +1,130 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
-import { ethers } from 'ethers';
+import { Injectable, NotFoundException, Logger } from '@nestjs/common';
+import { createPublicClient, http, getContract, formatUnits, multicall } from 'viem';
 import axios from 'axios';
 import { TokenBalance } from '../interfaces/token-balance.interface';
 import { NetworkConfigService } from '../config/configuration.service';
-import { TokenBalanceSchema } from '../interfaces/token-balance.interface';
 
-// ERC20 ABI for balanceOf and decimals functions
+// ERC20 ABI
 const ERC20_ABI = [
-  'function balanceOf(address owner) view returns (uint256)',
-  'function decimals() view returns (uint8)',
-  'function symbol() view returns (string)',
-  'function name() view returns (string)',
-];
+  {
+    name: 'balanceOf',
+    type: 'function',
+    inputs: [{ name: 'owner', type: 'address' }],
+    outputs: [{ name: '', type: 'uint256' }],
+    stateMutability: 'view',
+  },
+  {
+    name: 'decimals',
+    type: 'function',
+    inputs: [],
+    outputs: [{ name: '', type: 'uint8' }],
+    stateMutability: 'view',
+  },
+  {
+    name: 'symbol',
+    type: 'function',
+    inputs: [],
+    outputs: [{ name: '', type: 'string' }],
+    stateMutability: 'view',
+  },
+  {
+    name: 'name',
+    type: 'function',
+    inputs: [],
+    outputs: [{ name: '', type: 'string' }],
+    stateMutability: 'view',
+  },
+] as const;
 
 @Injectable()
 export class BalanceService {
+  private readonly logger = new Logger(BalanceService.name);
+
   constructor(private readonly networkConfigService: NetworkConfigService) {}
 
   async getTokenBalances(
     networkName: string,
     address: string,
   ): Promise<TokenBalance[]> {
-    console.log(`Fetching balances for address ${address} on ${networkName}`);
+    this.logger.log(
+      `Fetching balances for address ${address} on ${networkName}`,
+    );
+
     const network = this.networkConfigService.getNetwork(networkName);
     if (!network) {
       throw new NotFoundException(`Network ${networkName} not supported`);
     }
 
-    // Initialize provider
-    const provider = new ethers.JsonRpcProvider(network.rpcUrl);
+    const client = createPublicClient({
+      transport: http(network.rpcUrl),
+    });
 
-    // Get token list from network
     const tokens = await this.getTokenList(network.name);
-    const balances: TokenBalance[] = [];
+    
+    try {
+      // Prepare multicall contracts
+      const contracts = tokens.map(token => ({
+        address: token.address as `0x${string}`,
+        abi: ERC20_ABI,
+      }));
 
-    // Fetch balances for each token
-    for (const token of tokens) {
-      try {
-        const contract = new ethers.Contract(
-          token.address,
-          ERC20_ABI,
-          provider,
-        );
+      // Prepare multicall calls
+      const calls = contracts.flatMap(contract => [
+        {
+          ...contract,
+          functionName: 'balanceOf',
+          args: [address as `0x${string}`],
+        },
+        {
+          ...contract,
+          functionName: 'decimals',
+        },
+        {
+          ...contract,
+          functionName: 'symbol',
+        },
+        {
+          ...contract,
+          functionName: 'name',
+        },
+      ]);
 
-        const [balance, decimals, symbol, name] = await Promise.all([
-          contract.balanceOf(address),
-          contract.decimals(),
-          contract.symbol(),
-          contract.name(),
-        ]);
+      // Execute multicall
+      const results = await multicall(client, {
+        contracts: calls as any[],
+      });
 
-        const tokenPrice = await this.getTokenPrice(token.address);
-        const balanceFormatted = ethers.formatUnits(balance, decimals);
-        const balanceUsd = parseFloat(balanceFormatted) * tokenPrice;
+      // Process results
+      const balances: TokenBalance[] = [];
+      const tokenPrices = await this.getTokenPrices(
+        tokens.map(t => t.address)
+      );
 
-        if (parseFloat(balanceFormatted) > 0) {
+      for (let i = 0; i < results.length; i += 4) {
+        const [balance, decimals, symbol, name] = results.slice(i, i + 4);
+        const token = tokens[Math.floor(i / 4)];
+
+        if (balance > 0n) {
+          const balanceFormatted = formatUnits(balance, decimals);
+          const tokenPrice = tokenPrices[token.address.toLowerCase()] || 0;
+          const balanceUsd = parseFloat(balanceFormatted) * tokenPrice;
+
           balances.push({
             token_address: token.address,
             name,
             symbol,
-            decimals: Number(decimals),
+            decimals,
             balance: balance.toString(),
             balance_usd: Number(balanceUsd.toFixed(2)),
           });
         }
-      } catch (error) {
-        console.error(
-          `Error fetching balance for token ${token.address}:`,
-          error,
-        );
       }
-    }
 
-    return balances.map(balance => {
-      const result = TokenBalanceSchema.safeParse(balance);
-      if (!result.success) {
-        console.error('Invalid token balance data:', result.error);
-        return null;
-      }
-      return result.data;
-    }).filter((balance): balance is TokenBalance => balance !== null);
+      return balances;
+    } catch (error) {
+      this.logger.error('Error fetching token balances:', error);
+      throw error;
+    }
   }
 
   private async getTokenList(network: string): Promise<{ address: string }[]> {
@@ -93,15 +138,22 @@ export class BalanceService {
     return tokens.map(token => ({ address: token.address }));
   }
 
-  private async getTokenPrice(tokenAddress: string): Promise<number> {
+  private async getTokenPrices(
+    tokenAddresses: string[],
+  ): Promise<Record<string, number>> {
     try {
+      const addresses = tokenAddresses.join(',');
       const response = await axios.get(
-        `https://api.coingecko.com/api/v3/simple/token_price/ethereum?contract_addresses=${tokenAddress}&vs_currencies=usd`,
+        `https://api.coingecko.com/api/v3/simple/token_price/ethereum?contract_addresses=${addresses}&vs_currencies=usd`,
       );
-      return response.data[tokenAddress.toLowerCase()]?.usd || 0;
+      // Convert response to a simple address -> price mapping
+      return Object.entries(response.data).reduce((acc, [address, data]: [string, any]) => {
+        acc[address.toLowerCase()] = data.usd || 0;
+        return acc;
+      }, {} as Record<string, number>);
     } catch (error) {
-      console.error('Error fetching token price:', error);
-      return 0;
+      this.logger.error('Error fetching token prices:', error);
+      return {};
     }
   }
 }

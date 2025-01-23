@@ -1,4 +1,26 @@
 import { z } from 'zod';
+import { ApiProperty } from '@nestjs/swagger';
+
+// Class for Swagger documentation
+export class TokenBalanceEntity {
+  @ApiProperty({ example: '0x6b175474e89094c44da98b954eedeac495271d0f' })
+  token_address: string;
+
+  @ApiProperty({ example: 'Dai Stablecoin' })
+  name: string;
+
+  @ApiProperty({ example: 'DAI' })
+  symbol: string;
+
+  @ApiProperty({ example: 18 })
+  decimals: number;
+
+  @ApiProperty({ example: '1000000000000000000' })
+  balance: string;
+
+  @ApiProperty({ example: 1.0 })
+  balance_usd: number;
+}
 
 // Zod schemas for validation
 export const TokenBalanceSchema = z.object({
@@ -16,7 +38,8 @@ export const TokenBalanceSchema = z.object({
 export const NetworkSchema = z.object({
   name: z.string().toLowerCase(),
   rpcUrl: z.string().url(),
-  chainId: z.number().int().positive()
+  chainId: z.number().int().positive(),
+  tokens: z.array(z.any())
 });
 
 // TypeScript types inferred from the schemas

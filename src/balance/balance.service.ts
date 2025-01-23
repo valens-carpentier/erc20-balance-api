@@ -3,6 +3,7 @@ import { ethers } from 'ethers';
 import axios from 'axios';
 import { TokenBalance } from '../interfaces/token-balance.interface';
 import { NetworkConfigService } from '../config/configuration.service';
+import { TokenBalanceSchema } from '../interfaces/token-balance.interface';
 
 // ERC20 ABI for balanceOf and decimals functions
 const ERC20_ABI = [
@@ -71,7 +72,14 @@ export class BalanceService {
       }
     }
 
-    return balances;
+    return balances.map(balance => {
+      const result = TokenBalanceSchema.safeParse(balance);
+      if (!result.success) {
+        console.error('Invalid token balance data:', result.error);
+        return null;
+      }
+      return result.data;
+    }).filter((balance): balance is TokenBalance => balance !== null);
   }
 
   private async getTokenList(network: string): Promise<{ address: string }[]> {
